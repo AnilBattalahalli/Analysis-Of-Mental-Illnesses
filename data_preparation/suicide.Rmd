@@ -1,0 +1,60 @@
+---
+title: "Research"
+author: "Anil Battalahalli Sreenath"
+date: "3/15/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(fig.width=6, fig.height=3) 
+library(dplyr)
+library(ggplot2)
+library(boot)
+library(GGally)
+library(viridis)
+library(hrbrthemes)
+```
+
+```{r}
+df <- read.csv('./suicide.csv')
+df <- within(df, rm(country.year, HDI.for.year))
+df <- df[df$year != '2016',]
+dim(df)
+```
+
+```{r}
+colnames(df)
+```
+
+
+```{r}
+df <- na.omit(df)
+dim(df)
+```
+
+Let's summarize the dataset by grouping it by year and obtaining the total number of suicide of all the countries. 
+
+```{r}
+df_by_year <- df %>% 
+              group_by(year,sex) %>% 
+              summarize(suicide = sum(suicides_no))
+```
+
+```{r}
+ggplot(df_by_year, aes(x=year, y=suicide, fill=sex))+
+  geom_bar(position=position_dodge(width=0.5), stat="identity", color='black')+xlab("Year")+ylab("Total Suicide")+ggtitle("Suicide by year")+theme_minimal()
+```
+
+```{r}
+ggpairs(df, columns = c("suicides_no","suicides.100k.pop","gdp_per_capita....","population"), axisLabels = 'none',
+        upper = list(continuous = 'points', combo = 'dot'),
+        lower = list(continuous = 'cor', combo = 'dot'),
+        diag = list(continuous = 'densityDiag')) +
+ theme_ipsum()
+```
+
+```{r}
+
+```
+

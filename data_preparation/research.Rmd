@@ -1,0 +1,302 @@
+---
+title: "research"
+author: "Anil Battalahalli Sreenath"
+date: "3/18/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("GGally")
+library(ggplot2)
+library(dplyr)
+library(boot)
+library(gridExtra)
+library(parallel)
+library(vegan)
+library(cluster)
+options(warn=-1)
+set.seed(84884)
+```
+
+```{r}
+cl <- makeCluster(detectCores())
+```
+
+```{r}
+df <- read.csv('absolute_grand_final.csv')
+df$unef <- ifelse(df$unemp <= 6, TRUE, FALSE)
+df$hdif <- ifelse(df$HDI >= 0.55, TRUE, FALSE)
+df$intf <- ifelse(df$Year >= 2010, TRUE, FALSE)
+df$gdppcf <- ifelse(df$GDP >=3000, TRUE, FALSE)
+```
+
+Column Names:
+
+```{r}
+names(df)
+```
+
+Select Columns for Pair Plot:
+
+```{r}
+df_num <- subset(df, select = -c(Country, unef, hdif, intf, gdppcf))
+ggcorr(
+  df_num,
+  geom = "tile",
+  max_size = 6,
+  size = 3.5,
+  hjust = 0.75,
+  #angle = -45, 
+  color = "grey50",
+  label = TRUE,
+  label_size = 3, 
+  label_round = 2, 
+  label_alpha = TRUE,
+  palette = ""
+)
+```
+
+```{r, message=FALSE, warning=FALSE}
+a <- ggplot(df, aes(x = HDI, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+theme_minimal()+xlab("HDI")
+b <- ggplot(df, aes(x = GDP, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+xlim(c(0, 20000))+xlab("GDP Per Capita")+theme_minimal()
+c <- ggplot(df, aes(x = pop, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+xlim(c(0, 1000000))+xlab("Population")+theme_minimal()
+d <- ggplot(df, aes(x = unemp, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+xlab("Unemployment Rate")+theme_minimal()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+**Research Questions:**
+
+1.  Do bipolar disorder and anxiety disorders coexist? Bootstrap
+2.  What is the gini coefficient for different illnesses? Jackknife
+3.  Mean difference of illnesses and suicide between lower HDI and higher HDI Bootstrap
+4.  Mean difference of illnesses and suicide between lower GDP and higher GDP Bootstrap
+
+### 1. Do bipolar disorder and anxiety disorders coexist? Using Bootstrap
+
+```{r}
+dis <- c("schiz_perc", "bipolar_perc", "anxiety_perc", "depr_perc")
+c <- t(combn(dis,2))
+```
+
+```{r}
+get_corr <- function(x, index){
+  a = names(x)[1]
+  b = names(x)[2]
+  x_sample <- x[index,]
+  return(cor(x_sample[a],x_sample[b]))
+}
+
+do_boot <- function(x){
+  print(names(x))
+  boot_corr <- boot(x, statistic = get_corr, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+```{r}
+for (i in 1:dim(c)[1]){
+  do_boot(df[c[i,]])
+}
+```
+
+### 2. Are the growth metrics correlated? Bootstrapping
+
+```{r}
+dis <- c("pop", "GDP", "HDI")
+c <- t(combn(dis,2))
+```
+
+```{r}
+get_corr <- function(x, index){
+  a = names(x)[1]
+  b = names(x)[2]
+  x_sample <- x[index,]
+  return(cor(x_sample[a],x_sample[b]))
+}
+
+do_boot <- function(x){
+  print(names(x))
+  boot_corr <- boot(x, statistic = get_corr, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+```{r}
+for (i in 1:dim(c)[1]){
+  do_boot(df[c[i,]])
+}
+```
+
+### 3. Mean difference of illnesses and suicide between lower HDI and higher HDI Bootstrap
+
+```{r}
+valcol <- c("schiz_perc","bipolar_perc","anxiety_perc","drug_perc","depr_perc","alc_perc","suicide_tt")
+```
+
+```{r}
+a <- ggplot(df, aes(x = bipolar_perc, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = schiz_perc, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+theme_classic()
+c <- ggplot(df, aes(x = anxiety_perc, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+theme_classic()
+d <- ggplot(df, aes(x = depr_perc, color = hdif, fill = hdif)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+Difference between higher HDI and lower HDI
+
+```{r}
+get_meandiff <- function(x, index, a){
+  x_sample <- x[index,]
+  return(mean(as.matrix(x_sample[x_sample$hdif,][a]))-mean(as.matrix(x_sample[!x_sample$hdif,][a])))
+}
+
+for (i in valcol){
+  print(i)
+  boot_corr <- boot(df, statistic = get_meandiff, a = i, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+```{r}
+mean(as.matrix(df[df$hdif, ][valcol[1]]))
+```
+
+### 4. Mean difference of illnesses and suicide between lower Unemployment and higher Unemployment Bootstrap
+
+```{r}
+a <- ggplot(df, aes(x = bipolar_perc, color = unef, fill = unef)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = schiz_perc, color = unef, fill = unef)) + geom_density(alpha = 0.5)+theme_classic()
+c <- ggplot(df, aes(x = anxiety_perc, color = unef, fill = unef)) + geom_density(alpha = 0.5)+theme_classic()
+d <- ggplot(df, aes(x = depr_perc, color = unef, fill = unef)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+```{r}
+get_meandiff <- function(x, index, a){
+  x_sample <- x[index,]
+  return(mean(as.matrix(x_sample[!x_sample$unef,][a]))-mean(as.matrix(x_sample[x_sample$unef,][a])))
+}
+
+for (i in valcol){
+  print(i)
+  boot_corr <- boot(df, statistic = get_meandiff, a = i, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+### 5. Mean difference of illnesses and suicide between before internet and after internet Bootstrap
+
+```{r}
+a <- ggplot(df, aes(x = bipolar_perc, color = intf, fill = intf)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = schiz_perc, color = intf, fill = intf)) + geom_density(alpha = 0.5)+theme_classic()
+c <- ggplot(df, aes(x = anxiety_perc, color = intf, fill = intf)) + geom_density(alpha = 0.5)+theme_classic()
+d <- ggplot(df, aes(x = depr_perc, color = intf, fill = intf)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+```{r}
+get_meandiff <- function(x, index, a){
+  x_sample <- x[index,]
+  return(mean(as.matrix(x_sample[!x_sample$intf,][a]))-mean(as.matrix(x_sample[x_sample$intf,][a])))
+}
+
+for (i in valcol){
+  print(i)
+  boot_corr <- boot(df, statistic = get_meandiff, a = i, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+### 6. Mean difference of illnesses and suicide between low GDPPC and high GDPPC Bootstrap
+
+```{r}
+a <- ggplot(df, aes(x = bipolar_perc, color = gdppcf, fill = gdppcf)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = schiz_perc, color = gdppcf, fill = gdppcf)) + geom_density(alpha = 0.5)+theme_classic()
+c <- ggplot(df, aes(x = anxiety_perc, color = gdppcf, fill = gdppcf)) + geom_density(alpha = 0.5)+theme_classic()
+d <- ggplot(df, aes(x = depr_perc, color = gdppcf, fill = gdppcf)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+```{r}
+get_meandiff <- function(x, index, a){
+  x_sample <- x[index,]
+  return(mean(as.matrix(x_sample[!x_sample$gdppcf,][a]))-mean(as.matrix(x_sample[x_sample$gdppcf,][a])))
+}
+
+for (i in valcol){
+  print(i)
+  boot_corr <- boot(df, statistic = get_meandiff, a = i, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```
+
+### Experimental: To see if k-means clustering can generate stratified samples from the data
+
+```{r}
+names(df)
+```
+
+```{r}
+u <- df %>% select(c("Year","GDP","HDI","unef","hdif","intf","gdppcf","pop")) %>% 
+      mutate_if(is.numeric, scale) %>% 
+      vegdist(method = "gower") %>% 
+      pam(k=2, diss=TRUE) 
+```
+
+```{r}
+df$strata <- ifelse(u$clustering == 1, yes=TRUE, no=FALSE)
+```
+
+### Plotting all the illnesses
+
+```{r}
+a <- ggplot(df, aes(x = bipolar_perc, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = schiz_perc, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+c <- ggplot(df, aes(x = anxiety_perc, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+d <- ggplot(df, aes(x = depr_perc, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+```{r}
+names(df)
+```
+
+### Plotting all the good things
+
+```{r, message=FALSE, warning=FALSE}
+a <- ggplot(df, aes(x = HDI, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+b <- ggplot(df, aes(x = GDP, color = strata, fill = strata)) + geom_density(alpha = 0.5)+xlim(c(0, 20000))+theme_classic()
+c <- ggplot(df, aes(x = pop, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()+xlim(c(0, 1000000))
+d <- ggplot(df, aes(x = unemp, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+grid.arrange(a, b, c, d, nrow=2, ncol=2)
+```
+
+Plotting suicides
+
+```{r}
+ggplot(df, aes(x = suicide_tt, color = strata, fill = strata)) + geom_density(alpha = 0.5)+theme_classic()
+```
+
+Difference between FALSE (developed) and TRUE (underdeveloped)
+
+```{r}
+get_meandiff <- function(x, index, a){
+  x_sample <- x[index,]
+  return(mean(as.matrix(x_sample[!x_sample$strata,][a]))-mean(as.matrix(x_sample[x_sample$strata,][a])))
+}
+
+for (i in valcol){
+  print(i)
+  boot_corr <- boot(df, statistic = get_meandiff, a = i, R = 1000, parallel = 'snow', cl=cl)
+  print(boot.ci(boot_corr, type = c("basic"), conf = 0.95))
+  cat("\n\n")
+}
+```

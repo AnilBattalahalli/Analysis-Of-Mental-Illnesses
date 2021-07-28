@@ -1,0 +1,12 @@
+country: 	Country Name
+year: 		Year
+schiz_perc:	Schizophrenia (100%)
+bipol_perc: 	Bipolar Disorder (100%)
+anx_perc:	Anxiety Disorder (100%)
+drug_perc:	Drug Abuse (100%)
+depr_perc:	Depression Disorder (100%)
+alc_perc:	Alcohol Addictive Disorder (100%)
+suicide_thou:	Suicide per 100,000 population
+pop:		Population
+unemp:		Unemployment Rate
+GDP:		GDP of the country
